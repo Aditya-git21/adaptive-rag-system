@@ -1,0 +1,17 @@
+Retrieval Augmented Generation is a technique that enhances large language models by retrieving relevant documents at query time. Instead of relying only on training data, the model gets fresh context from a knowledge base.
+
+FAISS is a library developed by Facebook AI Research for efficient similarity search over dense vectors. It supports multiple index types including Flat brute force search, IVF which uses inverted file indexes, and HNSW which builds a hierarchical graph structure for fast approximate nearest neighbor search.
+
+BM25 is a classical information retrieval algorithm based on term frequency and inverse document frequency. It is fast, interpretable, and works well for keyword-heavy queries but fails on semantic or paraphrased questions.
+
+Hybrid search combines vector search with keyword search. A weight parameter called alpha controls the balance. Alpha of 1.0 means pure vector, alpha of 0.0 means pure BM25, and alpha of 0.5 gives equal weight to both.
+
+Adaptive retrieval means the system decides at runtime how many chunks to retrieve based on query complexity. Short simple queries need fewer chunks. Long complex queries with multiple concepts need more chunks to build sufficient context.
+
+The feedback loop tracks latency and answer quality after every query. If latency is too high it reduces K to speed up retrieval. If answer quality is low it increases K to retrieve more context. This makes the system self-improving over time.
+
+Cross encoder reranking is a second pass over retrieved chunks using a more powerful model that scores each chunk against the query directly. This improves precision because the initial retrieval uses approximate methods but the reranker does exact relevance scoring.
+
+P50 latency is the median response time meaning half of requests are faster than this. P95 means 95 percent of requests complete faster than this value. P99 is the tail latency representing the slowest one percent of requests. Optimizing P95 and P99 matters most in production systems.
+
+Caching stores the result of previous queries so repeated questions return instantly without hitting the retrieval or generation pipeline. A simple dictionary cache with query as key works well for exact match caching. Semantic caching goes further by also returning cached results for similar but not identical queries.
