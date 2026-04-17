@@ -1,0 +1,13 @@
+Day 1 — April 17 2025
+
+Built: ingestion + hybrid retriever + adaptive K selector + 
+feedback tracker, all wired together in main.py. Full pipeline 
+runs end to end.
+
+Error: adaptive.py crashed with SyntaxError — triple quote got 
+cut off during paste. Fixed by rewriting the file from scratch 
+in nano and removing all docstrings.
+
+Learned: the LLM takes 85% of the total time. Retrieval is fast 
+(5-30ms) but the model takes 500-2000ms. So optimizing retrieval 
+alone won't make the system fast — you need model routing too.
