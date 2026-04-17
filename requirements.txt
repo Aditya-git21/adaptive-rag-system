@@ -1,0 +1,9 @@
+faiss-cpu
+sentence-transformers
+rank-bm25
+numpy
+requests
+pypdf
+langchain
+langchain-community
+einops
