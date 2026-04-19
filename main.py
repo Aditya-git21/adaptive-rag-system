@@ -27,20 +27,20 @@ Answer:"""
         return f"LLM error: {e}"
 
 if __name__ == "__main__":
-    chunks = load_and_chunk("data/rag_paper.pdf")
+    chunks = load_and_chunk("data/oops.pdf")
     retriever = HybridRetriever(chunks)
     tracker = FeedbackTracker(window_size=20)
 
     queries = [
-        "What is retrieval augmented generation?",
-        "How does FAISS indexing work?",
-        "What datasets were used to evaluate RAG?",
-        "Compare RAG with standard language models",
-        "What is the difference between open domain and closed domain QA?",
+        "What is inheritance in OOP?",
+        "What is the difference between abstraction and encapsulation?",
+        "What is polymorphism?",
+        "What is a constructor?",
+        "What is the difference between overloading and overriding?",
     ]
 
     print("\n" + "="*55)
-    print("DAY 2 — WITH RERANKER + REAL PDF")
+    print("OOP PDF — ADAPTIVE RAG TEST")
     print("="*55)
 
     for query in queries:
@@ -64,7 +64,8 @@ if __name__ == "__main__":
         tracker.record(total_ms, answer, query)
 
         print(f"\nQ: {query}")
-        print(f"  K={k} | retrieval={retrieval_ms:.0f}ms rerank={rerank_ms:.0f}ms LLM={llm_ms:.0f}ms")
-        print(f"  A: {answer[:200]}")
+        print(f"  complexity={complexity['label']} K={k} alpha={alpha}")
+        print(f"  retrieval={retrieval_ms:.0f}ms rerank={rerank_ms:.0f}ms LLM={llm_ms:.0f}ms")
+        print(f"  A: {answer[:250]}")
 
     tracker.report()
