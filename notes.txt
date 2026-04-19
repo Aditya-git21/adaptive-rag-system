@@ -11,3 +11,15 @@ in nano and removing all docstrings.
 Learned: the LLM takes 85% of the total time. Retrieval is fast 
 (5-30ms) but the model takes 500-2000ms. So optimizing retrieval 
 alone won't make the system fast — you need model routing too.
+
+Day 2 — April 18 2025
+
+Built: cross-encoder reranker in src/reranker.py, 
+wired into main pipeline between retrieval and LLM. 
+Switched from sample.txt to real RAG paper PDF with 62 chunks.
+
+Error: none today, clean run first try.
+
+Learned: reranker adds 38-308ms but improves answer quality 
+from 0.532 to 0.631. More source chunks = better answers even 
+with same retrieval logic. Real data matters more than I expected.
