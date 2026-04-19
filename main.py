@@ -5,6 +5,7 @@ from src.retriever import HybridRetriever
 from src.adaptive import analyze_query, select_k, select_alpha
 from src.feedback import FeedbackTracker
 from src.reranker import rerank
+from src.cache import QueryCache
 
 def ask_llm(context_chunks, question):
     context = "\n".join(f"- {c[:300]}" for c in context_chunks)
@@ -30,20 +31,29 @@ if __name__ == "__main__":
     chunks = load_and_chunk("data/oops.pdf")
     retriever = HybridRetriever(chunks)
     tracker = FeedbackTracker(window_size=20)
+    cache = QueryCache()
 
+    # same questions repeated to show cache working
     queries = [
         "What is inheritance in OOP?",
-        "What is the difference between abstraction and encapsulation?",
         "What is polymorphism?",
         "What is a constructor?",
-        "What is the difference between overloading and overriding?",
+        "What is inheritance in OOP?",  # repeated
+        "What is polymorphism?",         # repeated
     ]
 
     print("\n" + "="*55)
-    print("OOP PDF — ADAPTIVE RAG TEST")
+    print("DAY 3 — WITH CACHE")
     print("="*55)
 
     for query in queries:
+        cached = cache.get(query)
+        if cached:
+            print(f"\nQ: {query}")
+            print(f"  CACHE HIT — 0ms")
+            print(f"  A: {cached[:200]}")
+            continue
+
         complexity = analyze_query(query)
         k = select_k(complexity, latency_ms=tracker.get_stats().get("p95_ms", 0))
         alpha = select_alpha(query)
@@ -62,10 +72,11 @@ if __name__ == "__main__":
 
         total_ms = retrieval_ms + rerank_ms + llm_ms
         tracker.record(total_ms, answer, query)
+        cache.set(query, answer)
 
         print(f"\nQ: {query}")
-        print(f"  complexity={complexity['label']} K={k} alpha={alpha}")
         print(f"  retrieval={retrieval_ms:.0f}ms rerank={rerank_ms:.0f}ms LLM={llm_ms:.0f}ms")
-        print(f"  A: {answer[:250]}")
+        print(f"  A: {answer[:200]}")
 
     tracker.report()
+    cache.stats()
