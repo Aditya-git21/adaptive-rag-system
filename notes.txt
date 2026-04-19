@@ -23,3 +23,16 @@ Error: none today, clean run first try.
 Learned: reranker adds 38-308ms but improves answer quality 
 from 0.532 to 0.631. More source chunks = better answers even 
 with same retrieval logic. Real data matters more than I expected.
+
+Day 2 continued — OOP PDF test
+
+Tested on OOP PDF I know well. 4/5 answers correct.
+Q4 (constructor) hallucinated "surrounded by braces" — 
+retrieval was correct, LLM added training knowledge not in PDF.
+This is knowledge conflict — small models mix document content 
+with their own training. Fix would be a stricter prompt or 
+confidence threshold.
+
+Numbers: simple queries (K=2) took 536-620ms LLM time. 
+Complex queries (K=4) took 1188-2070ms. 
+Adaptive K is directly reducing LLM latency on simple questions.
