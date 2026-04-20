@@ -1,32 +1,9 @@
 import time
 import numpy as np
-import requests
-from src.ingestion import load_and_chunk
-from src.retriever import HybridRetriever
-from src.adaptive import analyze_query, select_k, select_alpha
-from src.feedback import FeedbackTracker
-from src.reranker import rerank
-from src.cache import QueryCache
-
-def ask_llm(context_chunks, question):
-    context = "\n".join(f"- {c[:300]}" for c in context_chunks)
-    prompt = f"""Use the context below to answer the question. Be direct and concise.
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
-    try:
-        r = requests.post(
-            "http://localhost:11434/api/generate",
-            json={"model": "llama3.2:1b", "prompt": prompt, "stream": False},
-            timeout=60
-        )
-        return r.json()["response"].strip()
-    except Exception as e:
-        return f"LLM error: {e}"
+from ingestion import load_and_chunk
+from retriever import HybridRetriever
+from adaptive import analyze_query, select_k, select_alpha
+from reranker import rerank
 
 def run_benchmark(retriever, queries, use_adaptive=True):
     latencies = []
@@ -66,10 +43,8 @@ def run_benchmark(retriever, queries, use_adaptive=True):
 if __name__ == "__main__":
     chunks = load_and_chunk("data/oops.pdf")
     retriever = HybridRetriever(chunks)
-    tracker = FeedbackTracker(window_size=20)
-    cache = QueryCache()
 
-    benchmark_queries = [
+    queries = [
         "What is inheritance?",
         "What is polymorphism?",
         "What is a constructor?",
@@ -83,10 +58,10 @@ if __name__ == "__main__":
     ]
 
     print("\nRunning fixed K=3 benchmark...")
-    fixed = run_benchmark(retriever, benchmark_queries, use_adaptive=False)
+    fixed = run_benchmark(retriever, queries, use_adaptive=False)
 
     print("Running adaptive K benchmark...")
-    adaptive = run_benchmark(retriever, benchmark_queries, use_adaptive=True)
+    adaptive = run_benchmark(retriever, queries, use_adaptive=True)
 
     print("\n" + "="*55)
     print("BENCHMARK — Fixed K=3 vs Adaptive K")
@@ -107,5 +82,5 @@ if __name__ == "__main__":
         sign = "+" if diff > 0 else ""
         print(f"{name:<20} {f:>12} {a:>12} {sign+str(diff):>10}")
 
-    print("\nnegative diff = adaptive is faster")
-    print("positive diff = fixed is faster for that metric")
+    print("\nNote: negative diff = adaptive is faster")
+    print("      positive diff = fixed is faster for that metric")
