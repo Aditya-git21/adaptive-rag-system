@@ -36,3 +36,28 @@ confidence threshold.
 Numbers: simple queries (K=2) took 536-620ms LLM time. 
 Complex queries (K=4) took 1188-2070ms. 
 Adaptive K is directly reducing LLM latency on simple questions.
+
+Day 3
+
+Built: QueryCache in src/cache.py — simple dict cache, 
+checks before hitting retrieval or LLM.
+
+Error: none today.
+
+Learned: cache hit rate was 40% with just 5 queries and 2 
+repeats. In real usage with thousands of similar questions 
+hit rate would be much higher. Limitation is exact string 
+match only — semantic cache would be the next step.
+
+Day 4
+
+Built: benchmark function in main.py comparing fixed K=3 
+vs adaptive K across 10 queries.
+
+Error: ModuleNotFoundError when running benchmark.py directly 
+from src folder. Fixed by moving benchmark into main.py so 
+imports run from root.
+
+Learned: adaptive K reduced avg retrieval from 17ms to 5.85ms 
+— 3x faster. Simple queries getting K=2 instead of K=3 makes 
+a real measurable difference. Numbers prove the concept works.
