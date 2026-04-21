@@ -83,3 +83,19 @@ source venv311/bin/activate
 ollama serve  # separate terminal
 python3 main.py
 ```
+
+### Day 5
+Added query decomposition. Multi-part queries split into sub-queries, each searched separately, answers merged.
+
+Example:
+- Input: "What is inheritance and what is polymorphism?"
+- Split: ["what is inheritance", "what is polymorphism?"]
+- Result: polymorphism got CACHE HIT 0ms — already cached from earlier query
+
+Problem: pronouns break decomposition. "how is it different from a method" loses "it" context.
+Fix would be passing first sub-query result as context into second sub-query.
+
+Benchmark after Day 5:
+P50: 29ms (was 46ms Day 4) — 36% faster
+P95: 71ms (same)
+Quality: 0.701 (improving each day)
