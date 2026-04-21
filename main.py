@@ -7,6 +7,7 @@ from src.adaptive import analyze_query, select_k, select_alpha
 from src.feedback import FeedbackTracker
 from src.reranker import rerank
 from src.cache import QueryCache
+from src.decompose import needs_decomposition, decompose
 
 def ask_llm(context_chunks, question):
     context = "\n".join(f"- {c[:300]}" for c in context_chunks)
@@ -27,6 +28,38 @@ Answer:"""
         return r.json()["response"].strip()
     except Exception as e:
         return f"LLM error: {e}"
+
+def run_query(query, retriever, tracker, cache):
+    cached = cache.get(query)
+    if cached:
+        print(f"  CACHE HIT — 0ms")
+        return cached
+
+    complexity = analyze_query(query)
+    k = select_k(complexity, latency_ms=tracker.get_stats().get("p95_ms", 0))
+    alpha = select_alpha(query)
+
+    t0 = time.perf_counter()
+    retrieved = retriever.retrieve_hybrid(query, k=k, alpha=alpha)
+    retrieval_ms = (time.perf_counter() - t0) * 1000
+
+    t1 = time.perf_counter()
+    reranked = rerank(query, retrieved, top_n=min(3, len(retrieved)))
+    rerank_ms = (time.perf_counter() - t1) * 1000
+
+    t2 = time.perf_counter()
+    answer = ask_llm(reranked, query)
+    llm_ms = (time.perf_counter() - t2) * 1000
+
+    total_ms = retrieval_ms + rerank_ms + llm_ms
+    tracker.record(total_ms, answer, query)
+    cache.set(query, answer)
+
+    print(f"  k={k} alpha={alpha} | "
+          f"retrieval={retrieval_ms:.0f}ms "
+          f"rerank={rerank_ms:.0f}ms "
+          f"llm={llm_ms:.0f}ms")
+    return answer
 
 def run_benchmark(retriever, queries, use_adaptive=True):
     latencies = []
@@ -50,8 +83,7 @@ def run_benchmark(retriever, queries, use_adaptive=True):
         rerank(query, retrieved, top_n=min(3, len(retrieved)))
         rerank_ms = (time.perf_counter() - t1) * 1000
 
-        total = retrieval_ms + rerank_ms
-        latencies.append(total)
+        latencies.append(retrieval_ms + rerank_ms)
         retrieval_times.append(retrieval_ms)
         rerank_times.append(rerank_ms)
 
@@ -69,7 +101,61 @@ if __name__ == "__main__":
     tracker = FeedbackTracker(window_size=20)
     cache = QueryCache()
 
-    benchmark_queries = [
+    # normal queries
+    normal_queries = [
+        "What is inheritance?",
+        "What is polymorphism?",
+        "What is a constructor?",
+    ]
+
+    # multi-part queries that need decomposition
+    multi_queries = [
+        "What is inheritance and what is polymorphism?",
+        "What is abstraction and also explain encapsulation?",
+        "What is a constructor and how is it different from a method?",
+    ]
+
+    print("\n" + "="*55)
+    print("NORMAL QUERIES")
+    print("="*55)
+
+    for query in normal_queries:
+        print(f"\nQ: {query}")
+        answer = run_query(query, retriever, tracker, cache)
+        print(f"  A: {answer[:200]}")
+
+    print("\n" + "="*55)
+    print("MULTI-PART QUERIES WITH DECOMPOSITION")
+    print("="*55)
+
+    for query in multi_queries:
+        print(f"\nOriginal Q: {query}")
+
+        if needs_decomposition(query):
+            sub_queries = decompose(query)
+            print(f"  Split into {len(sub_queries)} sub-queries: {sub_queries}")
+
+            answers = []
+            for sq in sub_queries:
+                print(f"\n  Sub-query: '{sq}'")
+                ans = run_query(sq, retriever, tracker, cache)
+                answers.append(ans)
+
+            merged = "\n\n".join(
+                f"[{sq}]\n{ans}" 
+                for sq, ans in zip(sub_queries, answers)
+            )
+            print(f"\n  MERGED ANSWER:")
+            print(f"  {merged[:400]}")
+        else:
+            answer = run_query(query, retriever, tracker, cache)
+            print(f"  A: {answer[:200]}")
+
+    print("\n" + "="*55)
+    print("BENCHMARK — Fixed K=3 vs Adaptive K")
+    print("="*55)
+
+    bench_queries = [
         "What is inheritance?",
         "What is polymorphism?",
         "What is a constructor?",
@@ -82,21 +168,15 @@ if __name__ == "__main__":
         "What is method overriding?",
     ]
 
-    print("\nRunning fixed K=3 benchmark...")
-    fixed = run_benchmark(retriever, benchmark_queries, use_adaptive=False)
+    fixed = run_benchmark(retriever, bench_queries, use_adaptive=False)
+    adaptive = run_benchmark(retriever, bench_queries, use_adaptive=True)
 
-    print("Running adaptive K benchmark...")
-    adaptive = run_benchmark(retriever, benchmark_queries, use_adaptive=True)
-
-    print("\n" + "="*55)
-    print("BENCHMARK — Fixed K=3 vs Adaptive K")
-    print("="*55)
     print(f"{'Metric':<20} {'Fixed K=3':>12} {'Adaptive K':>12} {'Diff':>10}")
     print("-"*55)
 
     metrics = [
-        ("P50 latency ms", fixed["p50"], adaptive["p50"]),
-        ("P95 latency ms", fixed["p95"], adaptive["p95"]),
+        ("P50 ms", fixed["p50"], adaptive["p50"]),
+        ("P95 ms", fixed["p95"], adaptive["p95"]),
         ("Avg retrieval ms", fixed["avg_retrieval"], adaptive["avg_retrieval"]),
         ("Avg rerank ms", fixed["avg_rerank"], adaptive["avg_rerank"]),
         ("Avg total ms", fixed["avg_total"], adaptive["avg_total"]),
@@ -107,5 +187,5 @@ if __name__ == "__main__":
         sign = "+" if diff > 0 else ""
         print(f"{name:<20} {f:>12} {a:>12} {sign+str(diff):>10}")
 
-    print("\nnegative diff = adaptive is faster")
-    print("positive diff = fixed is faster for that metric")
+    tracker.report()
+    cache.stats()
