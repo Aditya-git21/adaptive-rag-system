@@ -99,3 +99,26 @@ Benchmark after Day 5:
 P50: 29ms (was 46ms Day 4) — 36% faster
 P95: 71ms (same)
 Quality: 0.701 (improving each day)
+
+## what worked 
+
+- simple query fetches 2 chuks , medium query 4 chunks and complex 6 chunks , that actually made data retrival 3x faster
+
+- cache saved time on repeated query/question almost ~0ms 
+
+- feedback loop reduced k on its own when system got slow 
+
+- hybrid search found things that pure keywords and pure vector alone missed 
+
+## what didn't work
+
+- 1b model kept making things up, in helm pdf 4/5 queries were wrong even whn retriveal found right 
+
+- cache is not useful or dumb sometimes , same query with different words misses every time.
+
+- decomposition is also broken when query had "it" or "they" no context carried over 
+
+## how it adapts 
+
+Every query — system checks complexity, picks K, searches, reranks, generates, records time and quality. If slow — reduces K next time. If bad quality — increases K. No manual tuning, just runs and adjusts itself.
+
