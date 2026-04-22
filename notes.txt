@@ -75,3 +75,14 @@ from a method" loses context for "it" when run as standalone
 query. Real fix would be to carry context from first sub-query 
 into second. Also cache + decomposition worked together 
 automatically without any extra code.
+
+Day 6
+
+Built: wrote the short report section in README — what worked, 
+what didn't, how system adapts. In my own words.
+
+Error: none.
+
+Learned: writing what didn't work is harder than writing what 
+worked. But it shows you actually tested it and understood it, 
+not just ran it.
