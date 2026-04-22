@@ -61,3 +61,17 @@ imports run from root.
 Learned: adaptive K reduced avg retrieval from 17ms to 5.85ms 
 — 3x faster. Simple queries getting K=2 instead of K=3 makes 
 a real measurable difference. Numbers prove the concept works.
+
+Day 5
+
+Built: decompose.py splits multi-part queries on "and", 
+"also", "versus" into sub-queries, runs each separately, 
+merges answers.
+
+Error: none today.
+
+Learned: pronouns break decomposition — "how is it different 
+from a method" loses context for "it" when run as standalone 
+query. Real fix would be to carry context from first sub-query 
+into second. Also cache + decomposition worked together 
+automatically without any extra code.
