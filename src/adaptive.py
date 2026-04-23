@@ -39,9 +39,9 @@ def select_k(complexity: dict, latency_ms: float = 0.0) -> int:
     if score == 1:
         return 2
     elif score == 2:
-        return 4
-    else:
         return 6
+    else:
+        return 8
 
 def select_alpha(query: str) -> float:
     q = query.lower()

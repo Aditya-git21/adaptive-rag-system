@@ -25,7 +25,7 @@ def load_document(path: str) -> str:
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
-def chunk_text(text: str, chunk_size: int = 100, overlap: int = 20) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 80, overlap: int = 40) -> List[str]:
     """
     Split text into overlapping chunks by word count.
     
@@ -47,7 +47,7 @@ def chunk_text(text: str, chunk_size: int = 100, overlap: int = 20) -> List[str]
 
     return [c for c in chunks if len(c) > 30]  # drop tiny chunks
 
-def load_and_chunk(path: str, chunk_size: int = 100, overlap: int = 20) -> List[str]:
+def load_and_chunk(path: str, chunk_size: int = 80, overlap: int = 40) -> List[str]:
     """One-call convenience: load file and return chunks."""
     text = load_document(path)
     chunks = chunk_text(text, chunk_size, overlap)
