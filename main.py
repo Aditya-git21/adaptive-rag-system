@@ -11,7 +11,8 @@ from src.decompose import needs_decomposition, decompose
 
 def ask_llm(context_chunks, question):
     context = "\n".join(f"- {c[:300]}" for c in context_chunks)
-    prompt = f"""Use the context below to answer the question. Be direct and concise.
+    prompt = f"""Read the context and answer the question directly. 
+Give the specific fact or number from the context
 
 Context:
 {context}
@@ -29,163 +30,111 @@ Answer:"""
     except Exception as e:
         return f"LLM error: {e}"
 
-def run_query(query, retriever, tracker, cache):
-    cached = cache.get(query)
-    if cached:
-        print(f"  CACHE HIT — 0ms")
-        return cached
+def ask_base_llm(question):
+    prompt = f"""Answer this question from your own knowledge:
 
-    complexity = analyze_query(query)
+Question: {question}
+
+Answer:"""
+    try:
+        r = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": "llama3.2:1b", "prompt": prompt, "stream": False},
+            timeout=60
+        )
+        return r.json()["response"].strip()
+    except Exception as e:
+        return f"LLM error: {e}"
+
+def run_query(question, retriever, tracker, cache):
+    cached = cache.get(question)
+    if cached:
+        return cached, 0, 0, 0
+
+    complexity = analyze_query(question)
     k = select_k(complexity, latency_ms=tracker.get_stats().get("p95_ms", 0))
-    alpha = select_alpha(query)
+    alpha = select_alpha(question)
 
     t0 = time.perf_counter()
-    retrieved = retriever.retrieve_hybrid(query, k=k, alpha=alpha)
+    retrieved = retriever.retrieve_hybrid(question, k=k, alpha=alpha)
     retrieval_ms = (time.perf_counter() - t0) * 1000
 
     t1 = time.perf_counter()
-    reranked = rerank(query, retrieved, top_n=min(3, len(retrieved)))
+    reranked = rerank(question, retrieved, top_n=min(3, len(retrieved)))
     rerank_ms = (time.perf_counter() - t1) * 1000
 
     t2 = time.perf_counter()
-    answer = ask_llm(reranked, query)
+    answer = ask_llm(reranked, question)
     llm_ms = (time.perf_counter() - t2) * 1000
 
     total_ms = retrieval_ms + rerank_ms + llm_ms
-    tracker.record(total_ms, answer, query)
-    cache.set(query, answer)
+    tracker.record(total_ms, answer, question)
+    cache.set(question, answer)
 
-    print(f"  k={k} alpha={alpha} | "
-          f"retrieval={retrieval_ms:.0f}ms "
-          f"rerank={rerank_ms:.0f}ms "
-          f"llm={llm_ms:.0f}ms")
-    return answer
-
-def run_benchmark(retriever, queries, use_adaptive=True):
-    latencies = []
-    retrieval_times = []
-    rerank_times = []
-
-    for query in queries:
-        if use_adaptive:
-            complexity = analyze_query(query)
-            k = select_k(complexity)
-            alpha = select_alpha(query)
-        else:
-            k = 3
-            alpha = 0.5
-
-        t0 = time.perf_counter()
-        retrieved = retriever.retrieve_hybrid(query, k=k, alpha=alpha)
-        retrieval_ms = (time.perf_counter() - t0) * 1000
-
-        t1 = time.perf_counter()
-        rerank(query, retrieved, top_n=min(3, len(retrieved)))
-        rerank_ms = (time.perf_counter() - t1) * 1000
-
-        latencies.append(retrieval_ms + rerank_ms)
-        retrieval_times.append(retrieval_ms)
-        rerank_times.append(rerank_ms)
-
-    return {
-        "p50": round(np.percentile(latencies, 50), 2),
-        "p95": round(np.percentile(latencies, 95), 2),
-        "avg_retrieval": round(np.mean(retrieval_times), 2),
-        "avg_rerank": round(np.mean(rerank_times), 2),
-        "avg_total": round(np.mean(latencies), 2),
-    }
+    return answer, retrieval_ms, rerank_ms, llm_ms
 
 if __name__ == "__main__":
-    chunks = load_and_chunk("data/oops.pdf")
+    import sys
+    
+    chunks = load_and_chunk("data/met_syllabus.pdf")
     retriever = HybridRetriever(chunks)
     tracker = FeedbackTracker(window_size=20)
     cache = QueryCache()
 
-    # normal queries
-    normal_queries = [
-        "What is inheritance?",
-        "What is polymorphism?",
-        "What is a constructor?",
+    # demo queries — specific facts only in this PDF
+    queries = [
+        "What is the test duration for MET 2026?",
+        "What is the fee for second attempt in MET?",
+        "What is the marking scheme for MET 2026?",
+        "What is the minimum aggregate for ME program?",
+        "How many questions are there in MET 2026?",
+        ""What is the additional marks given to GATE qualified candidates in MET?",
     ]
 
-    # multi-part queries that need decomposition
-    multi_queries = [
-        "What is inheritance and what is polymorphism?",
-        "What is abstraction and also explain encapsulation?",
-        "What is a constructor and how is it different from a method?",
-    ]
+    # interactive mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
+        print("\nInteractive mode. Type your question. Press Ctrl+C to exit.\n")
+        while True:
+            try:
+                question = input("Your question: ").strip()
+                if not question:
+                    continue
 
-    print("\n" + "="*55)
-    print("NORMAL QUERIES")
-    print("="*55)
+                print("\n--- Base LLM (no document) ---")
+                base_answer = ask_base_llm(question)
+                print(f"{base_answer[:300]}")
 
-    for query in normal_queries:
-        print(f"\nQ: {query}")
-        answer = run_query(query, retriever, tracker, cache)
-        print(f"  A: {answer[:200]}")
+                print("\n--- RAG (from MET syllabus PDF) ---")
+                rag_answer, r_ms, rr_ms, l_ms = run_query(
+                    question, retriever, tracker, cache
+                )
+                print(f"{rag_answer[:300]}")
+                print(f"\n[retrieval={r_ms:.0f}ms rerank={rr_ms:.0f}ms llm={l_ms:.0f}ms]")
+                print("-"*50)
 
-    print("\n" + "="*55)
-    print("MULTI-PART QUERIES WITH DECOMPOSITION")
-    print("="*55)
+            except KeyboardInterrupt:
+                print("\nExiting.")
+                break
 
-    for query in multi_queries:
-        print(f"\nOriginal Q: {query}")
+    # demo mode — run preset queries
+    else:
+        print("\n" + "="*60)
+        print("BASE LLM vs RAG — MET 2026 SYLLABUS")
+        print("="*60)
+        print("Same question. No context vs document-grounded answer.\n")
 
-        if needs_decomposition(query):
-            sub_queries = decompose(query)
-            print(f"  Split into {len(sub_queries)} sub-queries: {sub_queries}")
+        for question in queries:
+            print(f"\nQ: {question}")
+            print("-"*60)
 
-            answers = []
-            for sq in sub_queries:
-                print(f"\n  Sub-query: '{sq}'")
-                ans = run_query(sq, retriever, tracker, cache)
-                answers.append(ans)
+            base = ask_base_llm(question)
+            print(f"BASE LLM : {base[:250]}")
 
-            merged = "\n\n".join(
-                f"[{sq}]\n{ans}" 
-                for sq, ans in zip(sub_queries, answers)
+            rag_answer, r_ms, rr_ms, l_ms = run_query(
+                question, retriever, tracker, cache
             )
-            print(f"\n  MERGED ANSWER:")
-            print(f"  {merged[:400]}")
-        else:
-            answer = run_query(query, retriever, tracker, cache)
-            print(f"  A: {answer[:200]}")
+            print(f"RAG      : {rag_answer[:250]}")
+            print(f"[retrieval={r_ms:.0f}ms rerank={rr_ms:.0f}ms llm={l_ms:.0f}ms]")
 
-    print("\n" + "="*55)
-    print("BENCHMARK — Fixed K=3 vs Adaptive K")
-    print("="*55)
-
-    bench_queries = [
-        "What is inheritance?",
-        "What is polymorphism?",
-        "What is a constructor?",
-        "What is the difference between abstraction and encapsulation?",
-        "What is the difference between overloading and overriding?",
-        "What is inheritance in OOP?",
-        "How does polymorphism work?",
-        "What is encapsulation?",
-        "What is abstraction?",
-        "What is method overriding?",
-    ]
-
-    fixed = run_benchmark(retriever, bench_queries, use_adaptive=False)
-    adaptive = run_benchmark(retriever, bench_queries, use_adaptive=True)
-
-    print(f"{'Metric':<20} {'Fixed K=3':>12} {'Adaptive K':>12} {'Diff':>10}")
-    print("-"*55)
-
-    metrics = [
-        ("P50 ms", fixed["p50"], adaptive["p50"]),
-        ("P95 ms", fixed["p95"], adaptive["p95"]),
-        ("Avg retrieval ms", fixed["avg_retrieval"], adaptive["avg_retrieval"]),
-        ("Avg rerank ms", fixed["avg_rerank"], adaptive["avg_rerank"]),
-        ("Avg total ms", fixed["avg_total"], adaptive["avg_total"]),
-    ]
-
-    for name, f, a in metrics:
-        diff = round(a - f, 2)
-        sign = "+" if diff > 0 else ""
-        print(f"{name:<20} {f:>12} {a:>12} {sign+str(diff):>10}")
-
-    tracker.report()
-    cache.stats()
+        tracker.report()
+        cache.stats()
