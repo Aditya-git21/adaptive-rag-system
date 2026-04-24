@@ -19,6 +19,24 @@ PINNED = {
 }
 
 
+def rewrite_query(question):
+    prompt = f"""Rewrite this question as a clean, formal search query for a banking document.
+Keep it short. Only return the rewritten query, nothing else.
+
+Question: {question}
+
+Rewritten query:"""
+    try:
+        r = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": "llama3.2:1b", "prompt": prompt, "stream": False},
+            timeout=60
+        )
+        return r.json()["response"].strip()
+    except:
+        return question
+
+
 def ask_llm(context_chunks, question):
     context = "\n".join(f"- {c[:300]}" for c in context_chunks)
     prompt = f"""Read the context and answer the question directly.
@@ -58,7 +76,7 @@ Answer:"""
         return f"LLM error: {e}"
 
 
-def run_query(question, retriever, tracker, cache):
+def run_query(question, retriever, tracker, cache, rewrite=False):
     cached = cache.get(question)
     if cached:
         return cached, 0, 0, 0
@@ -67,16 +85,23 @@ def run_query(question, retriever, tracker, cache):
         reranked = [PINNED[question]]
         retrieval_ms, rerank_ms = 0, 0
     else:
-        complexity = analyze_query(question)
+        search_query = question
+        if rewrite:
+            rewritten = rewrite_query(question)
+            if rewritten != question:
+                print(f"[rewritten] {rewritten}")
+            search_query = rewritten
+
+        complexity = analyze_query(search_query)
         k = select_k(complexity, latency_ms=tracker.get_stats().get("p95_ms", 0))
-        alpha = select_alpha(question)
+        alpha = select_alpha(search_query)
 
         t0 = time.perf_counter()
-        retrieved = retriever.retrieve_hybrid(question, k=k, alpha=alpha)
+        retrieved = retriever.retrieve_hybrid(search_query, k=k, alpha=alpha)
         retrieval_ms = (time.perf_counter() - t0) * 1000
 
         t1 = time.perf_counter()
-        reranked = rerank(question, retrieved, top_n=min(3, len(retrieved)))
+        reranked = rerank(search_query, retrieved, top_n=min(3, len(retrieved)))
         rerank_ms = (time.perf_counter() - t1) * 1000
 
     t2 = time.perf_counter()
@@ -121,7 +146,9 @@ if __name__ == "__main__":
                 print(ask_base_llm(question)[:300])
 
                 print("\n--- RAG (from HDFC MITC) ---")
-                rag_answer, r_ms, rr_ms, l_ms = run_query(question, retriever, tracker, cache)
+                rag_answer, r_ms, rr_ms, l_ms = run_query(
+                    question, retriever, tracker, cache, rewrite=True
+                )
                 print(rag_answer[:300])
                 print(f"\n[retrieval={r_ms:.0f}ms rerank={rr_ms:.0f}ms llm={l_ms:.0f}ms]")
                 print("-" * 50)
@@ -141,7 +168,9 @@ if __name__ == "__main__":
             print("-" * 60)
             base = ask_base_llm(question)
             print(f"BASE LLM : {base[:250]}")
-            rag_answer, r_ms, rr_ms, l_ms = run_query(question, retriever, tracker, cache)
+            rag_answer, r_ms, rr_ms, l_ms = run_query(
+                question, retriever, tracker, cache, rewrite=False
+            )
             print(f"RAG      : {rag_answer[:250]}")
             print(f"[retrieval={r_ms:.0f}ms rerank={rr_ms:.0f}ms llm={l_ms:.0f}ms]")
 
