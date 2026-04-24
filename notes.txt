@@ -86,3 +86,14 @@ Error: none.
 Learned: writing what didn't work is harder than writing what 
 worked. But it shows you actually tested it and understood it, 
 not just ran it.
+
+Day 7:
+- Switched dataset to HDFC credit card MITC PDF (710 chunks) — real banking document with specific fees and numbers so RAG vs base LLM contrast is clear and verifiable
+- Errors: chunk overlap values needed tuning, queries had to be rewritten multiple times to match how the PDF phrases things — "cash advance fee" missed but "cash withdrawal fee or transaction fee" hit
+- Learned: every new PDF needs its own query tuning — retrieval depends on how the document words things, not how the user words things; vector search finds meaning but BM25 still needs keyword overlap
+
+Day 8:
+- Added query rewriting — LLM rewrites casual user input into formal document-matching language before retrieval
+- Rewriting only active in interactive mode, not demo mode (demo queries already well-formed, rewriting was hurting retrieval)
+- Error: enabling rewriting on demo queries pulled wrong chunks — "annual fee" rewritten too generically and hit a different card variant's chunk
+- Learned: query rewriting helps for casual input but can hurt precision on already-good queries — need to apply it selectively
