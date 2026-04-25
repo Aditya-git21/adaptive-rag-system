@@ -97,3 +97,9 @@ Day 8:
 - Rewriting only active in interactive mode, not demo mode (demo queries already well-formed, rewriting was hurting retrieval)
 - Error: enabling rewriting on demo queries pulled wrong chunks — "annual fee" rewritten too generically and hit a different card variant's chunk
 - Learned: query rewriting helps for casual input but can hurt precision on already-good queries — need to apply it selectively
+
+Day 9:
+- Built semantic cache — embeds queries and uses cosine similarity instead of exact string match
+- Measured actual similarity scores: exact match = 1.0, paraphrase = 0.55, casual rephrase = 0.46
+- Threshold set at 0.75 — below that risks returning wrong cached answers for different questions
+- Learned: semantic cache needs a stronger embedding model to bridge paraphrases — all-MiniLM-L6-v2 is too small for this; limitation is model size not the approach
