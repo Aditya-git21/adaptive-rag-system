@@ -51,7 +51,7 @@ adaptive-rag-system/
 │   ├── adaptive.py       # query complexity, K selection
 │   ├── reranker.py       # cross-encoder reranking
 │   ├── feedback.py       # latency tracker, auto K adjustment
-│   ├── cache.py          # query cache
+│   ├── cache.py          # semantic cache using cosine similarity
 │   └── decompose.py      # multi-part query splitting
 ├── data/
 │   └── hdfc_credit_card.pdf
@@ -108,16 +108,18 @@ What is the interest free grace period on HDFC credit card?
 ## What worked
 
 - simple queries fetch 2 chunks, complex fetch 6 — retrieval 3x faster
-- cache returns repeated queries instantly ~0ms
+- cache returns repeated queries instantly at 0ms
 - feedback loop reduces K on its own when system gets slow
 - hybrid search finds things pure vector and pure keyword both miss
 - query rewriting lets users type naturally without worrying about exact words
+- semantic cache hits exact and near-exact matches at similarity 1.0
 
 ## What didn't work
 
 - 1b model hallucinates on questions where retrieval finds the wrong chunk
-- exact-match cache misses when same question is phrased differently
+- semantic cache misses paraphrases — "annual fee" vs "hdfc annual membership fee" scores 0.55, below safe threshold of 0.75
 - query rewriting with a 1b model is inconsistent — sometimes makes queries worse
+- all-MiniLM-L6-v2 too small to bridge paraphrases — needs a larger embedding model
 
 ---
 
@@ -133,3 +135,4 @@ What is the interest free grace period on HDFC credit card?
 | 6 | Base LLM vs RAG comparison mode |
 | 7 | Switched to HDFC MITC PDF, tuned queries to match document |
 | 8 | Query rewriting in interactive mode |
+| 9 | Semantic cache — embedding based similarity, measured paraphrase scores |
