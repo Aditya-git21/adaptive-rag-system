@@ -1,195 +1,135 @@
-# 📡 Kafka Fundamentals
-### Event Streaming · Producer · Consumer · Docker · KRaft
+# Adaptive RAG Inference System
+
+Local RAG pipeline that optimizes itself at runtime. No API keys. Runs on your machine using Ollama.
+
+Built as part of an AI inference internship assignment at Indicnode.
 
 ---
 
-## 🚀 Introduction
+## What it does
 
-This project is a hands-on implementation of **Apache Kafka** fundamentals — run locally using Docker, with real producer-consumer examples written in Python.
+Takes a question, figures out how complex it is, searches an actual document using both meaning-based and keyword search, reranks the results, and generates an answer. Tracks latency after every query and adjusts itself automatically.
 
-Built to understand how distributed event streaming works in real systems like food delivery apps, payment pipelines, and analytics platforms.
-
----
-
-## ❓ The Problem Kafka Solves
-
-In distributed systems, multiple services need the same data at the same time but for different reasons.
-
-Without Kafka:
-- Every service calls every other service directly
-- Tight coupling, hard to scale, messy to maintain
-
-With Kafka:
-- One event published → multiple consumers read independently
-- Producers and consumers stay completely decoupled
-- Messages are stored and can be replayed
+In interactive mode — you can type however you want. The system rewrites your question into clean document language before searching.
 
 ---
 
-## 🏗️ Architecture
+## Demo — HDFC Credit Card MITC
 
-<p align="center">
-<img src="docs/kafka_architecture.svg" alt="Kafka Producer Consumer Architecture" width="700"/>
-</p>
+Base LLM vs RAG on the same question. One guesses, one reads the document.
 
-> One `order_created` event flows from the **Order Service (Producer)** into the **Kafka Topic** across 3 partitions, consumed independently by Restaurant, Delivery, and Analytics services — each with their own Consumer Group and offset tracking.
+![Demo Output](screenshots/output-main.png)
+![Feedback Report](screenshots/outputm-main.png)
 
----
+### Query Rewriting in action
 
-## 🧩 Core Concepts
-
-### 📤 Producer
-Publishes events to a Kafka topic.
-Example: Order service publishing `order_created` events continuously.
-
-### 📋 Topic
-A named stream of events. Example: `order-events`.
-Topics are split into partitions for parallel processing.
-
-### 🗂️ Partition
-- Ordering guaranteed **within** a partition, not across the topic
-- This project uses **3 partitions** per topic
-- Each message has an **offset** — its position in the partition
-
-### 📥 Consumer Group
-- Same group → messages divided across consumers (load sharing)
-- Different groups → each group gets its own full copy of the topic
-- Each group tracks offsets independently
-
-### 🔁 Offset
-Kafka tracks which messages each consumer group has already read using offsets. This enables replay and fault tolerance.
+![Interactive](screenshots/interactive-result.png)
 
 ---
 
-## 🛠️ Tech Stack
+## Stack
 
-| Tool | Purpose |
-|---|---|
-| Apache Kafka 3.8.0 | Event streaming platform |
-| KRaft mode | No Zookeeper needed |
-| Docker + Compose | Local Kafka setup |
-| Python 3.11 | Producer & Consumer logic |
-| Kafka UI | Visual topic & message browser |
+| Component | Technology |
+|-----------|------------|
+| LLM | llama3.2:1b via Ollama |
+| Embeddings | all-MiniLM-L6-v2 |
+| Vector Index | FAISS HNSW (in-memory) |
+| Keyword Search | BM25 |
+| Reranker | ms-marco-MiniLM-L-6-v2 |
+| Runtime | Python 3.11 |
 
 ---
 
-## ⚙️ Local Setup
+## Project Structure
 
-### Prerequisites
-- Docker Desktop
-- Python 3.11+
+```
+adaptive-rag-system/
+├── main.py
+├── src/
+│   ├── ingestion.py      # PDF loading and chunking
+│   ├── retriever.py      # hybrid FAISS + BM25 search
+│   ├── adaptive.py       # query complexity, K selection
+│   ├── reranker.py       # cross-encoder reranking
+│   ├── feedback.py       # latency tracker, auto K adjustment
+│   ├── cache.py          # query cache
+│   └── decompose.py      # multi-part query splitting
+├── data/
+│   └── hdfc_credit_card.pdf
+├── screenshots/
+├── requirements.txt
+└── notes.txt
+```
 
-### 1. Clone and install
+---
+
+## Setup
+
 ```bash
-git clone https://github.com/Aditya-git21/kafka-fundamentals.git
-cd kafka-fundamentals
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .
-```
-
-### 2. Start Kafka
-```bash
-./scripts/start-kafka.sh
-```
-Kafka runs on `localhost:9092` · Kafka UI at `http://localhost:8080`
-
-### 3. Stop Kafka
-```bash
-./scripts/stop-kafka.sh
+git clone https://github.com/Aditya-git21/adaptive-rag-system
+cd adaptive-rag-system
+python3 -m venv venv311
+source venv311/bin/activate
+pip install -r requirements.txt
+ollama pull llama3.2:1b
 ```
 
 ---
 
-## 🎬 Live Demo Flow
+## Run
 
-Open 4 terminals:
-
-**Terminal 1 — Start Kafka**
 ```bash
-./scripts/start-kafka.sh
-```
+# open a separate terminal first
+ollama serve
 
-**Terminal 2 — Create topic**
-```bash
-source .venv/bin/activate
-python examples/live_topic_setup.py --topic order-events-live
-```
+# then
+source venv311/bin/activate
 
-**Terminal 3 — Start producer**
-```bash
-source .venv/bin/activate
-python examples/live_producer.py --topic order-events-live --interval 1
-```
+# demo mode
+python3 main.py demo
 
-**Terminal 4 — Start consumer**
-```bash
-source .venv/bin/activate
-python examples/live_consumer.py --topic order-events-live
-```
-
-Watch events flow from producer to consumer in near real time.
-
----
-
-## 🗂️ Project Structure
-
-```text
-.
-├── README.md
-├── compose.yaml
-├── docs
-│   └── kafka_architecture.svg
-├── examples
-│   ├── live_consumer.py
-│   ├── live_producer.py
-│   └── live_topic_setup.py
-├── scripts
-│   ├── start-kafka.sh
-│   └── stop-kafka.sh
-└── src
-    └── kafka_zero_to_hero
-        ├── __init__.py
-        └── common.py
+# interactive mode — type anything, rewriting handles the rest
+python3 main.py --interactive
 ```
 
 ---
 
-## ⚠️ Real Challenges with Kafka
+## Demo Queries
 
-| Challenge | Why it matters |
-|---|---|
-| No global ordering | Order only guaranteed per partition |
-| Duplicate processing | Consumers must be idempotent |
-| Schema discipline | Careless changes break consumers |
-| Operational overhead | Needs monitoring, alerting, capacity planning |
-| Overkill for small apps | Simple apps don't need this complexity |
-
----
-
-## 📌 Status
-
-- ✅ Local Kafka setup with Docker
-- ✅ Producer publishing JSON events
-- ✅ Consumer reading in real time
-- ✅ Multi-consumer group demo
-- ✅ Kafka UI for visual inspection
+```
+What is the annual fee for HDFC credit card?
+What is the rate of interest or finance charge percentage per month?
+What is the minimum amount due calculation for HDFC credit card?
+What is the cash withdrawal fee or transaction fee?
+What is the interest free grace period on HDFC credit card?
+```
 
 ---
 
-## 🔮 Future Enhancements
+## What worked
 
-- 🔁 Schema Registry integration
-- 📊 Prometheus metrics
-- 🔐 SSL and SASL authentication
-- 🌐 Deploy on AWS MSK
-- 🧪 Consumer group lag monitoring
+- simple queries fetch 2 chunks, complex fetch 6 — retrieval 3x faster
+- cache returns repeated queries instantly ~0ms
+- feedback loop reduces K on its own when system gets slow
+- hybrid search finds things pure vector and pure keyword both miss
+- query rewriting lets users type naturally without worrying about exact words
+
+## What didn't work
+
+- 1b model hallucinates on questions where retrieval finds the wrong chunk
+- exact-match cache misses when same question is phrased differently
+- query rewriting with a 1b model is inconsistent — sometimes makes queries worse
 
 ---
 
-## 👤 Author
+## Progress
 
-**Aditya Amlapure**  
-M.E Cloud Computing · MAHE Manipal  
-[LinkedIn](https://linkedin.com/in/aditya-amlapure21) · [GitHub](https://github.com/Aditya-git21)
+| Day | What was built |
+|-----|----------------|
+| 1 | Basic pipeline — chunking, hybrid retrieval, adaptive K, feedback tracker |
+| 2 | Cross-encoder reranker, switched to real PDF |
+| 3 | Query cache, cache hit benchmark |
+| 4 | Fixed K vs adaptive K benchmark |
+| 5 | Query decomposition |
+| 6 | Base LLM vs RAG comparison mode |
+| 7 | Switched to HDFC MITC PDF, tuned queries to match document |
+| 8 | Query rewriting in interactive mode |
