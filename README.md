@@ -1,124 +1,195 @@
-# Adaptive RAG Inference System
-
-Local RAG pipeline that optimizes itself at runtime.
-No API keys. Runs on your machine using Ollama.
-
-![Architecture](architecture.png)
+# 📡 Kafka Fundamentals
+### Event Streaming · Producer · Consumer · Docker · KRaft
 
 ---
 
-## Stack
-Python 3.11, FAISS, BM25, Ollama (llama3.2:1b), sentence-transformers
+## 🚀 Introduction
+
+This project is a hands-on implementation of **Apache Kafka** fundamentals — run locally using Docker, with real producer-consumer examples written in Python.
+
+Built to understand how distributed event streaming works in real systems like food delivery apps, payment pipelines, and analytics platforms.
 
 ---
 
-## What it does
-Takes a question, figures out how complex it is, searches a 
-document using both meaning-based and keyword search, reranks 
-the results, and generates an answer. Tracks latency after 
-every query and adjusts search depth automatically.
+## ❓ The Problem Kafka Solves
+
+In distributed systems, multiple services need the same data at the same time but for different reasons.
+
+Without Kafka:
+- Every service calls every other service directly
+- Tight coupling, hard to scale, messy to maintain
+
+With Kafka:
+- One event published → multiple consumers read independently
+- Producers and consumers stay completely decoupled
+- Messages are stored and can be replayed
 
 ---
 
-## Progress
+## 🏗️ Architecture
 
-### Day 1
-Built basic pipeline — chunking, hybrid retrieval, adaptive K, feedback tracker.
+<p align="center">
+<img src="docs/kafka_architecture.svg" alt="Kafka Producer Consumer Architecture" width="700"/>
+</p>
 
-| P50 | P95 | Quality |
-|-----|-----|---------|
-| 957ms | 2126ms | 0.532 |
-
-Problem: only 3 chunks, retrieval order was approximate.
-Fix: add reranker, use real PDF.
-
-### Day 2
-Added cross-encoder reranker. Switched to real RAG paper PDF (62 chunks).
-
-| P50 | P95 | Quality |
-|-----|-----|---------|
-| 1579ms | 2705ms | 0.631 |
-
-Quality improved. LLM is 85% of total time — retrieval is not the bottleneck.
-Fix: add cache, build before/after benchmark.
+> One `order_created` event flows from the **Order Service (Producer)** into the **Kafka Topic** across 3 partitions, consumed independently by Restaurant, Delivery, and Analytics services — each with their own Consumer Group and offset tracking.
 
 ---
 
-### Day 3
-Added cache layer. Repeated queries return instantly from memory.
+## 🧩 Core Concepts
 
-| Metric | Value |
-|--------|-------|
-| Cache hit time | 0ms |
-| Without cache | 2025ms |
-| Hit rate | 40% with 5 queries |
+### 📤 Producer
+Publishes events to a Kafka topic.
+Example: Order service publishing `order_created` events continuously.
 
-Problem: cache only matches exact same string. "What is inheritance" 
-and "What is inheritance in OOP" are different keys — both miss cache.
-Fix next: semantic cache using embeddings as keys.
+### 📋 Topic
+A named stream of events. Example: `order-events`.
+Topics are split into partitions for parallel processing.
+
+### 🗂️ Partition
+- Ordering guaranteed **within** a partition, not across the topic
+- This project uses **3 partitions** per topic
+- Each message has an **offset** — its position in the partition
+
+### 📥 Consumer Group
+- Same group → messages divided across consumers (load sharing)
+- Different groups → each group gets its own full copy of the topic
+- Each group tracks offsets independently
+
+### 🔁 Offset
+Kafka tracks which messages each consumer group has already read using offsets. This enables replay and fault tolerance.
 
 ---
 
-### Day 4
-Built benchmark report — fixed K=3 vs adaptive K across 10 queries.
+## 🛠️ Tech Stack
 
-| Metric | Fixed K=3 | Adaptive K | Diff |
-|--------|-----------|------------|------|
-| P50 latency | 56ms | 45ms | -10ms |
-| P95 latency | 78ms | 70ms | -7ms |
-| Avg retrieval | 17ms | 5.85ms | -11ms |
-| Avg rerank | 38ms | 40ms | +2ms |
-| Avg total | 55ms | 46ms | -9ms |
+| Tool | Purpose |
+|---|---|
+| Apache Kafka 3.8.0 | Event streaming platform |
+| KRaft mode | No Zookeeper needed |
+| Docker + Compose | Local Kafka setup |
+| Python 3.11 | Producer & Consumer logic |
+| Kafka UI | Visual topic & message browser |
 
-Adaptive K wins on every metric except rerank (+2ms).
-Retrieval is 3x faster because simple queries get K=2 instead of K=3.
-Rerank is slightly slower because complex queries get K=6 — more chunks to score.
+---
 
-Problem: LLM not included in benchmark — too slow to run 20x.
-Next: query decomposition bonus feature.
+## ⚙️ Local Setup
 
-## How to run
+### Prerequisites
+- Docker Desktop
+- Python 3.11+
+
+### 1. Clone and install
 ```bash
-source venv311/bin/activate
-ollama serve  # separate terminal
-python3 main.py
+git clone https://github.com/Aditya-git21/kafka-fundamentals.git
+cd kafka-fundamentals
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
 ```
 
-### Day 5
-Added query decomposition. Multi-part queries split into sub-queries, each searched separately, answers merged.
+### 2. Start Kafka
+```bash
+./scripts/start-kafka.sh
+```
+Kafka runs on `localhost:9092` · Kafka UI at `http://localhost:8080`
 
-Example:
-- Input: "What is inheritance and what is polymorphism?"
-- Split: ["what is inheritance", "what is polymorphism?"]
-- Result: polymorphism got CACHE HIT 0ms — already cached from earlier query
+### 3. Stop Kafka
+```bash
+./scripts/stop-kafka.sh
+```
 
-Problem: pronouns break decomposition. "how is it different from a method" loses "it" context.
-Fix would be passing first sub-query result as context into second sub-query.
+---
 
-Benchmark after Day 5:
-P50: 29ms (was 46ms Day 4) — 36% faster
-P95: 71ms (same)
-Quality: 0.701 (improving each day)
+## 🎬 Live Demo Flow
 
-## what worked 
+Open 4 terminals:
 
-- simple query fetches 2 chuks , medium query 4 chunks and complex 6 chunks , that actually made data retrival 3x faster
+**Terminal 1 — Start Kafka**
+```bash
+./scripts/start-kafka.sh
+```
 
-- cache saved time on repeated query/question almost ~0ms 
+**Terminal 2 — Create topic**
+```bash
+source .venv/bin/activate
+python examples/live_topic_setup.py --topic order-events-live
+```
 
-- feedback loop reduced k on its own when system got slow 
+**Terminal 3 — Start producer**
+```bash
+source .venv/bin/activate
+python examples/live_producer.py --topic order-events-live --interval 1
+```
 
-- hybrid search found things that pure keywords and pure vector alone missed 
+**Terminal 4 — Start consumer**
+```bash
+source .venv/bin/activate
+python examples/live_consumer.py --topic order-events-live
+```
 
-## what didn't work
+Watch events flow from producer to consumer in near real time.
 
-- 1b model kept making things up, in helm pdf 4/5 queries were wrong even whn retriveal found right 
+---
 
-- cache is not useful or dumb sometimes , same query with different words misses every time.
+## 🗂️ Project Structure
 
-- decomposition is also broken when query had "it" or "they" no context carried over 
+```text
+.
+├── README.md
+├── compose.yaml
+├── docs
+│   └── kafka_architecture.svg
+├── examples
+│   ├── live_consumer.py
+│   ├── live_producer.py
+│   └── live_topic_setup.py
+├── scripts
+│   ├── start-kafka.sh
+│   └── stop-kafka.sh
+└── src
+    └── kafka_zero_to_hero
+        ├── __init__.py
+        └── common.py
+```
 
-## how it adapts 
+---
 
-Every query — system checks complexity, picks K, searches, reranks, generates, records time and quality. If slow — reduces K next time. If bad quality — increases K. No manual tuning, just runs and adjusts itself.
+## ⚠️ Real Challenges with Kafka
 
+| Challenge | Why it matters |
+|---|---|
+| No global ordering | Order only guaranteed per partition |
+| Duplicate processing | Consumers must be idempotent |
+| Schema discipline | Careless changes break consumers |
+| Operational overhead | Needs monitoring, alerting, capacity planning |
+| Overkill for small apps | Simple apps don't need this complexity |
+
+---
+
+## 📌 Status
+
+- ✅ Local Kafka setup with Docker
+- ✅ Producer publishing JSON events
+- ✅ Consumer reading in real time
+- ✅ Multi-consumer group demo
+- ✅ Kafka UI for visual inspection
+
+---
+
+## 🔮 Future Enhancements
+
+- 🔁 Schema Registry integration
+- 📊 Prometheus metrics
+- 🔐 SSL and SASL authentication
+- 🌐 Deploy on AWS MSK
+- 🧪 Consumer group lag monitoring
+
+---
+
+## 👤 Author
+
+**Aditya Amlapure**  
+M.E Cloud Computing · MAHE Manipal  
+[LinkedIn](https://linkedin.com/in/aditya-amlapure21) · [GitHub](https://github.com/Aditya-git21)
