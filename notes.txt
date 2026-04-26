@@ -103,3 +103,9 @@ Day 9:
 - Measured actual similarity scores: exact match = 1.0, paraphrase = 0.55, casual rephrase = 0.46
 - Threshold set at 0.75 — below that risks returning wrong cached answers for different questions
 - Learned: semantic cache needs a stronger embedding model to bridge paraphrases — all-MiniLM-L6-v2 is too small for this; limitation is model size not the approach
+
+Day 10:
+- Ran full latency benchmark — fixed K=3 vs adaptive K vs semantic cache on 10 HDFC queries
+- Cache speedup: 4367x faster on warm hits (43ms cold → 0ms warm)
+- Adaptive K wins on retrieval (6ms vs 18ms) but loses on rerank (46ms vs 31ms) — reranker cost offsets retrieval gains at p99
+- Learned: adaptive K is only a clear win when reranking is not in the pipeline — with reranking the tradeoff depends on query complexity distribution
