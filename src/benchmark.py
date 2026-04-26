@@ -1,9 +1,14 @@
 import time
+import sys
 import numpy as np
-from ingestion import load_and_chunk
-from retriever import HybridRetriever
-from adaptive import analyze_query, select_k, select_alpha
-from reranker import rerank
+
+sys.path.insert(0, '.')
+from src.ingestion import load_and_chunk
+from src.retriever import HybridRetriever
+from src.adaptive import analyze_query, select_k, select_alpha
+from src.reranker import rerank
+from src.cache import QueryCache
+
 
 def run_benchmark(retriever, queries, use_adaptive=True):
     latencies = []
@@ -35,43 +40,81 @@ def run_benchmark(retriever, queries, use_adaptive=True):
     return {
         "p50": round(np.percentile(latencies, 50), 2),
         "p95": round(np.percentile(latencies, 95), 2),
+        "p99": round(np.percentile(latencies, 99), 2),
         "avg_retrieval": round(np.mean(retrieval_times), 2),
         "avg_rerank": round(np.mean(rerank_times), 2),
         "avg_total": round(np.mean(latencies), 2),
     }
 
+
+def run_cache_benchmark(retriever, queries):
+    cache = QueryCache()
+    cold_times = []
+    warm_times = []
+
+    # cold pass — no cache
+    for query in queries:
+        t0 = time.perf_counter()
+        retrieved = retriever.retrieve_hybrid(query, k=4, alpha=0.5)
+        rerank(query, retrieved, top_n=3)
+        total = (time.perf_counter() - t0) * 1000
+        cold_times.append(total)
+        cache.set(query, "cached")
+
+    # warm pass — all hits
+    for query in queries:
+        t0 = time.perf_counter()
+        cache.get(query)
+        total = (time.perf_counter() - t0) * 1000
+        warm_times.append(total)
+
+    return {
+        "cold_avg": round(np.mean(cold_times), 2),
+        "cold_p95": round(np.percentile(cold_times, 95), 2),
+        "warm_avg": round(np.mean(warm_times), 2),
+        "warm_p95": round(np.percentile(warm_times, 95), 2),
+        "speedup": round(np.mean(cold_times) / max(np.mean(warm_times), 0.01), 1),
+    }
+
+
 if __name__ == "__main__":
-    chunks = load_and_chunk("data/oops.pdf")
+    print("Loading HDFC credit card PDF...")
+    chunks = load_and_chunk("data/hdfc_credit_card.pdf")
     retriever = HybridRetriever(chunks)
 
     queries = [
-        "What is inheritance?",
-        "What is polymorphism?",
-        "What is a constructor?",
-        "What is the difference between abstraction and encapsulation?",
-        "What is the difference between overloading and overriding?",
-        "What is inheritance in OOP?",
-        "How does polymorphism work?",
-        "What is encapsulation?",
-        "What is abstraction?",
-        "What is method overriding?",
+        "What is the annual fee for HDFC credit card?",
+        "What is the rate of interest or finance charge percentage per month?",
+        "What is the minimum amount due calculation for HDFC credit card?",
+        "What is the cash withdrawal fee or transaction fee?",
+        "What is the interest free grace period on HDFC credit card?",
+        "What is the late payment charge for HDFC credit card?",
+        "What is the over limit charge for HDFC credit card?",
+        "What is the foreign currency markup fee?",
+        "How are reward points calculated?",
+        "What happens if minimum amount due is not paid?",
     ]
 
-    print("\nRunning fixed K=3 benchmark...")
+    print("Running fixed K=3 benchmark...")
     fixed = run_benchmark(retriever, queries, use_adaptive=False)
 
     print("Running adaptive K benchmark...")
     adaptive = run_benchmark(retriever, queries, use_adaptive=True)
 
-    print("\n" + "="*55)
-    print("BENCHMARK — Fixed K=3 vs Adaptive K")
-    print("="*55)
-    print(f"{'Metric':<20} {'Fixed K=3':>12} {'Adaptive K':>12} {'Diff':>10}")
-    print("-"*55)
+    print("Running cache benchmark...")
+    cache_stats = run_cache_benchmark(retriever, queries)
+
+    print("\n" + "=" * 60)
+    print("BENCHMARK RESULTS — HDFC MITC Dataset (10 queries)")
+    print("=" * 60)
+
+    print(f"\n{'Metric':<22} {'Fixed K=3':>12} {'Adaptive K':>12} {'Diff':>10}")
+    print("-" * 60)
 
     metrics = [
         ("P50 latency ms", fixed["p50"], adaptive["p50"]),
         ("P95 latency ms", fixed["p95"], adaptive["p95"]),
+        ("P99 latency ms", fixed["p99"], adaptive["p99"]),
         ("Avg retrieval ms", fixed["avg_retrieval"], adaptive["avg_retrieval"]),
         ("Avg rerank ms", fixed["avg_rerank"], adaptive["avg_rerank"]),
         ("Avg total ms", fixed["avg_total"], adaptive["avg_total"]),
@@ -80,7 +123,14 @@ if __name__ == "__main__":
     for name, f, a in metrics:
         diff = round(a - f, 2)
         sign = "+" if diff > 0 else ""
-        print(f"{name:<20} {f:>12} {a:>12} {sign+str(diff):>10}")
+        print(f"{name:<22} {f:>12} {a:>12} {sign+str(diff):>10}")
 
-    print("\nNote: negative diff = adaptive is faster")
-    print("      positive diff = fixed is faster for that metric")
+    print("\nnegative diff = adaptive is faster")
+
+    print(f"\n{'Cache Benchmark':}")
+    print("-" * 60)
+    print(f"  Cold (no cache) avg : {cache_stats['cold_avg']} ms")
+    print(f"  Cold (no cache) p95 : {cache_stats['cold_p95']} ms")
+    print(f"  Warm (cache hit) avg: {cache_stats['warm_avg']} ms")
+    print(f"  Warm (cache hit) p95: {cache_stats['warm_p95']} ms")
+    print(f"  Speedup             : {cache_stats['speedup']}x faster with cache")
