@@ -6,6 +6,12 @@ Built as part of an AI inference internship assignment at Indicnode.
 
 ---
 
+## Architecture
+
+![Architecture](architecture.png)
+
+---
+
 ## What it does
 
 Takes a question, figures out how complex it is, searches an actual document using both meaning-based and keyword search, reranks the results, and generates an answer. Tracks latency after every query and adjusts itself automatically.
