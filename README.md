@@ -1,8 +1,6 @@
 # Adaptive RAG Inference System
 
-Local RAG pipeline that optimizes itself at runtime. No API keys. Runs entirely on your machine using Ollama.
-
-Built as part of an AI inference internship assignment at Indicnode.
+A self-optimizing RAG pipeline that runs fully local — no API keys, no cloud. Built and iterated over 10 days as part of an AI inference internship at Indicnode.
 
 ---
 
@@ -14,20 +12,20 @@ Built as part of an AI inference internship assignment at Indicnode.
 
 ## What it does
 
-Takes a question, figures out how complex it is, searches an actual document using both meaning-based and keyword search, reranks the results, and generates an answer. Tracks latency after every query and adjusts itself automatically.
+You give it a question. It figures out how complex the question is, searches a real document using both vector similarity and keyword matching, reranks the results, and generates a grounded answer. After every query it tracks latency and adjusts itself — fewer chunks for simple questions, more for complex ones.
 
-In interactive mode — you can type however you want. The system rewrites your question into clean document language before searching.
+In interactive mode you can type however you want. It rewrites your question into clean document language before searching.
 
 ---
 
 ## Demo — HDFC Credit Card MITC
 
-Base LLM vs RAG on the same question. One guesses, one reads the document.
+Same question to both. Base LLM guesses. RAG reads the document.
 
 ![Demo Output](screenshots/output-main.png)
 ![Feedback Report](screenshots/outputm-main.png)
 
-### Query Rewriting in action
+### Query rewriting in interactive mode
 
 ![Interactive](screenshots/interactive-result.png)
 
@@ -35,7 +33,7 @@ Base LLM vs RAG on the same question. One guesses, one reads the document.
 
 ## Benchmark Results
 
-Run on HDFC MITC PDF — 10 queries, no LLM call (retrieval + rerank only).
+10 queries on HDFC MITC PDF — retrieval + rerank only, no LLM call.
 
 | Metric | Fixed K=3 | Adaptive K | Diff |
 |--------|-----------|------------|------|
@@ -46,11 +44,11 @@ Run on HDFC MITC PDF — 10 queries, no LLM call (retrieval + rerank only).
 | Avg rerank ms | 31.43 | 46.01 | +14.58 |
 | Avg total ms | 49.93 | 52.1 | +2.17 |
 
-**Cache:**
+**Cache — cold vs warm:**
 - Cold avg: 43.68ms → Warm avg: 0.0ms
-- Speedup: **4367x faster** on repeated queries
+- **4367x faster** on repeated queries
 
-Adaptive K wins on retrieval (fetches fewer chunks for simple queries) but the reranker offsets the gain at p99. Cache is the biggest win by far.
+Adaptive K retrieves faster (fewer chunks for simple queries) but the reranker offsets it at p99. Cache is the biggest win.
 
 ---
 
@@ -106,27 +104,25 @@ ollama pull llama3.2:1b
 ## Run
 
 ```bash
-# open a separate terminal first
+# separate terminal
 ollama serve
 
 # then
 source venv311/bin/activate
 
-# demo mode — BASE LLM vs RAG comparison
+# BASE LLM vs RAG demo
 python3 main.py demo
 
-# interactive mode — type anything, rewriting handles the rest
+# interactive — type anything
 python3 main.py --interactive
 
-# run latency benchmark
+# latency benchmark
 python3 src/benchmark.py
 ```
 
 ---
 
 ## Demo Queries
-
-Copy-paste these to test the system:
 
 ```
 What is the annual fee for HDFC credit card?
@@ -140,19 +136,18 @@ What is the interest free grace period on HDFC credit card?
 
 ## What worked
 
-- simple queries fetch 2 chunks, complex fetch 6 — retrieval 3x faster with adaptive K
-- cache returns repeated queries at 0ms — 4367x speedup over cold retrieval
-- feedback loop reduces K automatically when p95 latency spikes
-- hybrid search finds things pure vector and pure keyword both miss independently
-- query rewriting lets users type naturally — casual input normalized before retrieval
-- semantic cache hits exact and near-exact matches at cosine similarity 1.0
+- adaptive K — simple queries fetch 2 chunks, complex fetch 6, retrieval 3x faster
+- cache — repeated queries at 0ms, 4367x speedup over cold retrieval
+- feedback loop — reduces K automatically when p95 latency spikes
+- hybrid search — finds things pure vector and pure keyword both miss
+- query rewriting — casual input normalized before retrieval
 
 ## What didn't work
 
-- adaptive K loses at p99 — reranker cost offsets retrieval gains on complex queries
-- semantic cache misses paraphrases — "annual fee" vs "hdfc annual membership fee" scores 0.55, below safe threshold of 0.75
-- query rewriting with a 1b model is inconsistent — sometimes rewrites make retrieval worse
-- all-MiniLM-L6-v2 too small to bridge paraphrases — a larger embedding model would fix semantic cache misses
+- adaptive K loses at p99 — reranker cost offsets retrieval gains on harder queries
+- semantic cache misses paraphrases — "annual fee" vs "hdfc annual membership fee" only scores 0.55, safe threshold is 0.75
+- query rewriting inconsistent with 1b model — sometimes makes retrieval worse
+- all-MiniLM-L6-v2 too small to bridge paraphrases — larger model would fix this
 
 ---
 
